@@ -1,0 +1,373 @@
+# Technical Design Document — RideX
+
+**Project Name:** RideX – Ride Sharing System  
+**Document Version:** 1.0  
+**Language Standard:** C++17 (compatible with modern C++ compilers: GCC 9+, Clang 10+, MSVC 2019+)  
+**Paradigm:** Object-Oriented Programming (OOP)  
+
+---
+
+## 1. Architecture Overview
+
+RideX is structured using clean Object-Oriented principles. It separates domain entities (Users, Vehicles, Rides, Payments) from service coordination and user interaction (CLI).
+
+```
+                        +-------------------+
+                        |     main.cpp      |
+                        +---------+---------+
+                                  |
+                                  v
+                        +-------------------+
+                        |    RideManager    |  (Controller / Service)
+                        +---------+---------+
+                                  |
+         +----------------+-------+---------------+----------------+
+         |                        |                                |
+         v                        v                                v
++----------------+       +-----------------+             +-------------------+
+|  User (Base)   |       | Vehicle (Base)  |             |       Ride        |
++---+--------+---+       +----+----+---+---+             +---------+---------+
+    |        |                |    |   |                           |
+    v        v                v    v   v                           v
+Rider      Driver           Car  Bike  Auto                  +-----------+
+              |                                              |  Payment  |
+              +--- (has-a) ---+                              +-----------+
+```
+
+---
+
+## 2. Detailed Class Design
+
+### 2.1 `User` (Base Class)
+- **Responsibility:** Serves as the abstract/common base class representing any registered human user in the system. Enforces shared identity attributes.
+- **Key Data Members:**
+  - `protected: int id`: Unique identification number.
+  - `protected: std::string name`: Full name of the user.
+  - `protected: std::string phone`: Contact phone number.
+- **Key Methods:**
+  - `User(int id, const std::string& name, const std::string& phone)`: Parameterized constructor.
+  - `virtual ~User() = default`: Virtual destructor to ensure safe polymorphic destruction.
+  - `int getId() const`: Getter.
+  - `std::string getName() const`: Getter.
+  - `std::string getPhone() const`: Getter.
+  - `virtual void displayProfile() const = 0`: Pure virtual method for polymorphic profile rendering.
+- **Relationships:**
+  - Base class for `Rider` and `Driver` (Inheritance).
+
+---
+
+### 2.2 `Rider` (Derived from `User`)
+- **Responsibility:** Represents a passenger who can book rides, track current ride progress, and maintain a personal ride log.
+- **Key Data Members:**
+  - `private: int currentRideId`: ID of the ongoing ride (-1 if none).
+  - `private: std::vector<int> rideHistory`: List of completed/cancelled ride IDs.
+- **Key Methods:**
+  - `Rider(int id, const std::string& name, const std::string& phone)`: Constructor forwarding to `User(...)`.
+  - `void displayProfile() const override`: Overridden method displaying rider-specific details.
+  - `bool hasActiveRide() const`: Returns `currentRideId != -1`.
+  - `void setCurrentRide(int rideId)`: Sets active ride.
+  - `void clearCurrentRide()`: Resets active ride to -1.
+  - `void addRideToHistory(int rideId)`: Appends completed/cancelled ride ID.
+  - `const std::vector<int>& getRideHistory() const`: Const reference getter.
+- **Relationships:**
+  - Inherits from `User` (is-a).
+  - Associated with `Ride` instances via ID referencing.
+
+---
+
+### 2.3 `Driver` (Derived from `User`)
+- **Responsibility:** Represents a driver who operates a vehicle, manages duty status, and accepts/executes trips.
+- **Key Data Members:**
+  - `private: std::unique_ptr<Vehicle> vehicle`: The vehicle assigned to this driver.
+  - `private: bool isAvailable`: Availability status (true = ready for rides; false = offline/busy).
+  - `private: int currentRideId`: ID of active assigned ride (-1 if none).
+  - `private: std::vector<int> rideHistory`: Completed ride IDs.
+- **Key Methods:**
+  - `Driver(int id, const std::string& name, const std::string& phone)`: Constructor.
+  - `void assignVehicle(std::unique_ptr<Vehicle> v)`: Takes ownership of a vehicle.
+  - `Vehicle* getVehicle() const`: Returns raw pointer for inspection.
+  - `bool isAvailableForRide() const`: Returns `isAvailable && currentRideId == -1 && vehicle != nullptr`.
+  - `void setAvailability(bool status)`: Toggles active/inactive.
+  - `void setCurrentRide(int rideId)`: Sets active ride.
+  - `void clearCurrentRide()`: Resets active ride to -1.
+  - `void addRideToHistory(int rideId)`: Appends ride to history.
+  - `void displayProfile() const override`: Displays driver information, vehicle info, and availability.
+- **Relationships:**
+  - Inherits from `User` (is-a).
+  - Owns a `Vehicle` via `std::unique_ptr` (Composition / Ownership).
+
+---
+
+### 2.4 `Vehicle` (Abstract Base Class)
+- **Responsibility:** Defines the contract and common properties for all transport types. Encapsulates polymorphic fare computation.
+- **Key Data Members:**
+  - `protected: std::string licensePlate`: Vehicle registration number.
+  - `protected: int capacity`: Passenger seating limit.
+  - `protected: double baseFare`: Starting fare for the vehicle type.
+  - `protected: double perKmRate`: Rate charged per kilometer.
+- **Key Methods:**
+  - `Vehicle(const std::string& plate, int capacity, double baseFare, double perKmRate)`: Constructor.
+  - `virtual ~Vehicle() = default`: Virtual destructor.
+  - `virtual std::string getType() const = 0`: Pure virtual method returning "Car", "Bike", or "Auto".
+  - `virtual double calculateFare(double distanceKm) const`:
+    - Default/polymorphic formula: `baseFare + (distanceKm * perKmRate)`. Can be overridden by specialized subclasses.
+  - `std::string getLicensePlate() const`: Getter.
+  - `int getCapacity() const`: Getter.
+- **Relationships:**
+  - Base class for `Car`, `Bike`, and `Auto` (Inheritance & Polymorphism).
+
+---
+
+### 2.5 Concrete Vehicles: `Car`, `Bike`, `Auto`
+- **`Car`**:
+  - Sets `capacity = 4`, `baseFare = 50.0`, `perKmRate = 15.0`.
+  - `getType() const override { return "Car"; }`
+  - Optional override: `calculateFare(double distanceKm)` with minimum fare enforcement.
+- **`Bike`**:
+  - Sets `capacity = 1`, `baseFare = 20.0`, `perKmRate = 8.0`.
+  - `getType() const override { return "Bike"; }`
+- **`Auto`**:
+  - Sets `capacity = 3`, `baseFare = 30.0`, `perKmRate = 11.0`.
+  - `getType() const override { return "Auto"; }`
+- **Relationships:**
+  - Inherit from `Vehicle` (is-a).
+
+---
+
+### 2.6 `Ride`
+- **Responsibility:** Manages the complete lifecycle, metadata, and transition states of a single trip.
+- **Key Enums & Data Members:**
+  - `enum class RideStatus { REQUESTED, ACCEPTED, IN_PROGRESS, COMPLETED, CANCELLED };`
+  - `private: int rideId`: Unique identifier.
+  - `private: int riderId`: Reference to booking Rider.
+  - `private: int driverId`: Reference to assigned Driver (-1 initially).
+  - `private: std::string pickupLocation`: Origin description.
+  - `private: std::string dropLocation`: Destination description.
+  - `private: double distanceKm`: Distance in kilometers.
+  - `private: std::string vehicleType`: Type requested ("Car", "Bike", "Auto").
+  - `private: RideStatus status`: Current stage in lifecycle.
+  - `private: double fare`: Computed trip cost.
+- **Key Methods:**
+  - `Ride(int id, int riderId, const std::string& pickup, const std::string& drop, double distance, const std::string& vType)`: Constructor.
+  - State machine transitions:
+    - `void assignDriver(int dId)`: Changes status from `REQUESTED` to `ACCEPTED`.
+    - `void startRide()`: Validates and changes status from `ACCEPTED` to `IN_PROGRESS`.
+    - `void completeRide(double calculatedFare)`: Changes status to `COMPLETED` and sets final fare.
+    - `void cancelRide()`: Validates that ride is not in-progress or completed; changes to `CANCELLED`.
+  - Getters: `getId()`, `getRiderId()`, `getDriverId()`, `getStatus()`, `getFare()`, etc.
+  - `std::string getStatusString() const`: Helper returning string label of the enum.
+- **Relationships:**
+  - Aggregates IDs for `Rider` and `Driver` (Association by ID prevents tight pointer cycles).
+  - Generates a `Payment` upon completion.
+
+---
+
+### 2.7 `Payment`
+- **Responsibility:** Encapsulates the financial receipt of a completed ride.
+- **Key Data Members:**
+  - `private: int paymentId`: Unique transaction ID.
+  - `private: int rideId`: Associated ride ID.
+  - `private: double amount`: Final monetary value.
+  - `private: std::string paymentMethod`: "Cash", "Card", or "UPI".
+  - `private: bool isPaid`: Transaction status.
+- **Key Methods:**
+  - `Payment(int pId, int rId, double amt, const std::string& method)`: Constructor.
+  - `void processPayment()`: Sets `isPaid = true`.
+  - `void displayReceipt() const`: Prints clean terminal invoice.
+- **Relationships:**
+  - Associated with a single `Ride`.
+
+---
+
+### 2.8 `RideManager` (Controller / Service Orchestrator)
+- **Responsibility:** High-level coordinator holding active collections of all entities, handling ID generation, dispatching rides to drivers, enforcing business rules, and managing storage.
+- **Key Data Members:**
+  - `std::unordered_map<int, std::shared_ptr<Rider>> riders`: Fast lookup of riders by ID.
+  - `std::unordered_map<int, std::shared_ptr<Driver>> drivers`: Fast lookup of drivers by ID.
+  - `std::unordered_map<int, std::shared_ptr<Ride>> rides`: Fast lookup of rides by ID.
+  - `std::vector<std::shared_ptr<Payment>> payments`: Ledger of transactions.
+  - `int nextRiderId = 101;`
+  - `int nextDriverId = 201;`
+  - `int nextRideId = 1001;`
+  - `int nextPaymentId = 5001;`
+- **Key Methods:**
+  - `int registerRider(const std::string& name, const std::string& phone)`
+  - `int registerDriver(const std::string& name, const std::string& phone)`
+  - `bool assignVehicleToDriver(int driverId, std::unique_ptr<Vehicle> v)`
+  - `std::vector<std::shared_ptr<Driver>> getAvailableDrivers(const std::string& vehicleType = "") const`
+  - `int bookRide(int riderId, const std::string& pickup, const std::string& drop, double distance, const std::string& vType)`
+  - `bool acceptRide(int driverId, int rideId)`
+  - `bool startRide(int driverId, int rideId)`
+  - `bool completeRide(int driverId, int rideId, const std::string& paymentMethod)`
+  - `bool cancelRide(int rideId, int requesterId)`
+  - `void displayRideSummary(int rideId) const`
+  - Persistence methods: `saveToFiles()` and `loadFromFiles()`
+
+---
+
+## 3. Mapping OOP Concepts to Implementation
+
+| OOP Concept | Project Application | Why It Matters for Interviews |
+| :--- | :--- | :--- |
+| **Classes & Objects** | Concrete instances of `Rider`, `Driver`, `Car`, `Ride`, `Payment`. | Demonstrates ability to model real-world domains cleanly in code. |
+| **Encapsulation** | Private attributes (e.g. `isAvailable`, `currentRideId`, `fare`) exposed only through validated accessors and state-modifying methods. | Prevents illegal state tampering (e.g. directly setting a ride to completed without calculating fare). |
+| **Inheritance** | `User` → `Rider`, `Driver`<br>`Vehicle` → `Car`, `Bike`, `Auto` | Promotes code reuse; avoids duplicating `name`, `phone`, `licensePlate` across subclasses. |
+| **Abstraction** | Abstract base class `Vehicle` with pure virtual function `getType() = 0` and virtual `calculateFare()`. | High-level systems (e.g. `Ride`) don't need to know vehicle mechanics—they just ask for the fare. |
+| **Polymorphism** | Calling `vehicle->calculateFare(distance)` dynamically executes the derived class algorithm (`Car`, `Bike`, or `Auto`) through a base pointer/reference. | Demonstrates runtime dispatch (vtable mechanism) in C++. |
+| **Constructors & Initializer Lists** | Member initializer lists used everywhere (e.g., `Car(...) : Vehicle(...) {}`). | Modern C++ best practice, avoids default-construction overhead. |
+| **Composition & Association** | - `Driver` owns a `Vehicle` (Composition via `std::unique_ptr`).<br>- `Ride` references `Rider` and `Driver` by IDs (Association). | Demonstrates understanding of object lifecycles and avoiding memory leaks or cyclic references. |
+| **STL Containers** | `std::vector` for histories, `std::unordered_map` for O(1) entity lookups by ID. | Demonstrates practical standard library mastery over raw C arrays. |
+| **Exception Handling** | Throwing `std::invalid_argument` (negative distance, invalid phone) and custom `RideException` (driver already busy, illegal state jump). | Robust error handling without crashing the CLI process. |
+| **File Handling** | Serializing/deserializing riders, drivers, and ride logs using `std::ifstream`, `std::ofstream`, and `std::stringstream`. | Shows persistent storage without bloated external database drivers. |
+
+---
+
+## 4. Suggested Project Directory Structure
+
+```
+RideX/
+├── include/
+│   ├── User.h          # Abstract base class User
+│   ├── Rider.h         # Derived Rider class
+│   ├── Driver.h        # Derived Driver class
+│   ├── Vehicle.h       # Abstract base class Vehicle
+│   ├── Car.h           # Derived Car class
+│   ├── Bike.h          # Derived Bike class
+│   ├── Auto.h          # Derived Auto class
+│   ├── Ride.h          # Ride state & lifecycle
+│   ├── Payment.h       # Payment transaction record
+│   ├── RideManager.h   # Core engine / coordinator
+│   └── Exceptions.h    # Custom exception classes
+│
+├── src/
+│   ├── User.cpp
+│   ├── Rider.cpp
+│   ├── Driver.cpp
+│   ├── Vehicle.cpp
+│   ├── Car.cpp
+│   ├── Bike.cpp
+│   ├── Auto.cpp
+│   ├── Ride.cpp
+│   ├── Payment.cpp
+│   ├── RideManager.cpp
+│   └── main.cpp        # CLI interaction loop & entrypoint
+│
+├── data/               # Persistent CSV data directory
+│   ├── riders.csv
+│   ├── drivers.csv
+│   └── rides.csv
+│
+├── CMakeLists.txt      # Clean modern C++ CMake build script
+├── PRD.md              # Product Requirements Document
+├── TECHNICAL_DESIGN.md # Technical Design Document
+└── README.md           # Project documentation and build guide
+```
+
+---
+
+## 5. Command-Line Interface (CLI) Specification
+
+The CLI runs an interactive loop with input validation to prevent crashes from bad inputs (such as typing characters when numbers are expected).
+
+### 5.1 Main Menu
+```text
+====================================
+          🚗 Welcome to RideX
+====================================
+1. Rider Portal
+2. Driver Portal
+3. System Overview (View All Rides/Users)
+4. Save & Exit
+Choose an option (1-4): 
+```
+
+### 5.2 Rider Portal Flow
+```text
+--- Rider Portal ---
+1. Register New Rider
+2. Select Active Rider Profile
+3. Return to Main Menu
+
+[If Profile Selected: Rider: Rahul (ID: 101)]
+1. View Available Drivers
+2. Book a Ride (Enter pickup, drop, distance, vehicle preference)
+3. View Current Active Ride
+4. Cancel Current Ride
+5. View My Ride History
+6. Switch / Logout Profile
+```
+
+### 5.3 Driver Portal Flow
+```text
+--- Driver Portal ---
+1. Register New Driver
+2. Select Active Driver Profile
+3. Return to Main Menu
+
+[If Profile Selected: Driver: Amit (ID: 201) | Vehicle: Car (DL-01-AB-1234)]
+1. View My Profile & Vehicle
+2. Toggle Availability (Current: AVAILABLE)
+3. View Incoming / Assigned Ride Requests
+4. Accept Ride
+5. Start Ride
+6. Complete Ride & Generate Bill
+7. View Driver Earnings & Trip History
+8. Switch / Logout Profile
+```
+
+---
+
+## 6. Data Storage & Persistence Strategy
+
+### 6.1 In-Memory Management
+- The system operates smoothly using `std::unordered_map` and `std::vector` inside `RideManager`.
+- Ensures that logic, state transitions, and OOP hierarchies remain decoupled from storage.
+
+### 6.2 Lightweight CSV Persistence
+- CSV (Comma-Separated Values) files stored in `data/`:
+  - `riders.csv`: `id,name,phone`
+  - `drivers.csv`: `id,name,phone,vehicleType,licensePlate,isAvailable`
+  - `rides.csv`: `rideId,riderId,driverId,pickup,drop,distance,vehicleType,status,fare`
+- Read/Write logic handled using clean C++ streams (`std::ifstream`, `std::ofstream`, `std::stringstream`).
+
+---
+
+## 7. Step-by-Step Development Plan
+
+| Step | Milestone | Files Created / Touched | OOP Concepts Learned |
+| :---: | :--- | :--- | :--- |
+| **1** | **User Hierarchy** | `User.h`, `User.cpp`, `Rider.h`, `Rider.cpp`, `Driver.h`, `Driver.cpp` | Base & derived classes, access specifiers (`protected`, `private`), constructors, virtual destructor. |
+| **2** | **Vehicle Hierarchy** | `Vehicle.h`, `Vehicle.cpp`, `Car.h`, `Bike.h`, `Auto.h` | Pure virtual functions (`= 0`), abstract classes, runtime polymorphism via `virtual calculateFare()`. |
+| **3** | **Vehicle Ownership** | `Driver.h`, `Driver.cpp` | Composition / Ownership via `std::unique_ptr<Vehicle>`, move semantics (`std::move`). |
+| **4** | **Ride & Payment Entities** | `Ride.h`, `Ride.cpp`, `Payment.h`, `Payment.cpp` | Enums (`enum class`), lifecycle state encapsulation, association between domain classes. |
+| **5** | **RideManager In-Memory Engine** | `RideManager.h`, `RideManager.cpp` | STL containers (`unordered_map`, `vector`, `shared_ptr`), separation of concerns, business logic validation. |
+| **6** | **Dispatch & Fare Calculation** | `RideManager.cpp` | Polymorphic method dispatch (`driver->getVehicle()->calculateFare(...)`), state verification. |
+| **7** | **CLI Interactive Loop** | `main.cpp` | Clean console UI, input stream validation (`std::cin.fail()`, `ignore`), menu modularization. |
+| **8** | **Exception Handling** | `Exceptions.h`, all relevant `.cpp` files | `try-catch` blocks, standard exceptions, custom domain exceptions, robust program stability. |
+| **9** | **File Persistence (CSV)** | `RideManager.cpp` (Save/Load methods) | C++ file streams (`ifstream`, `ofstream`), string parsing (`stringstream`, `getline`). |
+| **10** | **Build Config & Documentation** | `CMakeLists.txt`, `README.md` | Modern project packaging, clear CV documentation, compilation verification. |
+
+---
+
+## 8. Project Sizing & Scope Guardrails
+
+- **Target Duration:** 1 to 2 weeks for a 2nd-year B.Tech student working at a steady pace.
+- **Code Size:** ~700–900 lines of total, well-documented C++ code across all files.
+- **Maintainability:** Every file has a single, well-defined responsibility (< 100 lines per file on average).
+- **Interview Readiness:** Every OOP concept used directly answers common C++ interview questions (e.g., *"Why is the destructor virtual in the base class?"*, *"What is the difference between composition and inheritance?"*, *"How does runtime polymorphism work via virtual functions?"*).
+
+---
+
+## 9. START HERE
+
+When you are ready to begin implementation, **do not write everything at once**.
+
+Follow this exact starting action:
+
+👉 **Begin with Step 1: The User Hierarchy**
+1. Create `include/User.h` with the base class `User` (having `id`, `name`, `phone`, pure virtual `displayProfile()`, and a virtual destructor).
+2. Create `include/Rider.h` and `include/Driver.h` inheriting from `User`.
+3. Implement their member functions in `src/User.cpp`, `src/Rider.cpp`, and `src/Driver.cpp`.
+4. Create a mini test in `src/main.cpp` to instantiate a `Rider` and a `Driver`, call their methods, and verify clean compilation.
+
+This guarantees a solid, verified foundation before introducing vehicles and ride state logic.
