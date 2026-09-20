@@ -1,0 +1,197 @@
+# 📘 RideX – Junior Developer Handover Guide
+
+Welcome to **RideX**! This document is written in simple, friendly language to help you quickly understand what this project is, how the code is organized, and how to run and test it with different scenarios.
+
+---
+
+## 1. What is RideX? (The Big Picture)
+
+RideX is a **terminal-based simulation of ride-hailing apps like Uber or Ola**, built in **C++**.
+
+It simulates:
+- **Passengers (Riders)** searching for transport and booking trips.
+- **Drivers** who own vehicles (Car, Bike, Auto) and fulfill trips.
+- **Dynamic Pricing:** Bikes are cheaper, Cars cost more.
+- **Billing & Invoices:** Calculates distance fares and prints receipts.
+- **Permanent Storage:** Saves all data automatically to simple CSV files (`data/` folder).
+
+---
+
+## 2. The ID System (Very Important!)
+
+To keep the system organized, entities use specific ID ranges. **Remember this rule:**
+
+| Entity | ID Range | Examples |
+| :--- | :--- | :--- |
+| **Riders** | Starts at `101` | `101` (Aarav), `102` (Priya), `103` (Akash) |
+| **Drivers** | Starts at `201` | `201` (Vikram - Car), `202` (Ravi - Bike), `203` (Sunil - Auto) |
+| **Rides (Trips)** | Starts at `1001` | `#1001`, `#1002`, `#1003` |
+| **Payments** | Starts at `5001` | `PAY-5001`, `PAY-5002` |
+
+> ⚠️ **Common Mistake:** If you enter Rider ID `103` in the **Driver Portal**, the system will say `Driver ID 103 not found!`. Riders use the Rider portal; Drivers use the Driver portal!
+
+---
+
+## 3. Project File Structure (Where is What?)
+
+```
+RideX/
+├── include/                 # Header files (.h) - Declarations of classes
+│   ├── User.h              # Base class for Rider and Driver (id, name, phone)
+│   ├── Rider.h             # Passenger class (tracks active ride and trip history)
+│   ├── Driver.h            # Driver class (owns a Vehicle, tracks availability)
+│   ├── Vehicle.h           # Base class for vehicles (rates, capacity, license plate)
+│   ├── Car.h               # Car subclass (4 seats, Rs 50 base, Rs 15/km)
+│   ├── Bike.h              # Bike subclass (1 seat, Rs 20 base, Rs 8/km)
+│   ├── Auto.h              # Auto subclass (3 seats, Rs 30 base, Rs 11/km)
+│   ├── Ride.h              # Trip class (manages status: REQUESTED -> ACCEPTED -> IN_PROGRESS -> COMPLETED)
+│   ├── Payment.h           # Receipt generator
+│   ├── RideManager.h       # The "Brain" of the project - holds all data in memory
+│   └── Exceptions.h        # Custom error types (e.g., InvalidOperationException)
+│
+├── src/                    # Source files (.cpp) - Actual logic and implementations
+│   ├── User.cpp, Rider.cpp, Driver.cpp
+│   ├── Vehicle.cpp, Car.cpp, Bike.cpp, Auto.cpp
+│   ├── Ride.cpp, Payment.cpp, RideManager.cpp
+│   └── main.cpp            # Terminal menus and input loops
+│
+├── data/                   # Flat-file database (CSV files)
+│   ├── riders.csv          # Saved riders
+│   ├── drivers.csv         # Saved drivers & vehicles
+│   └── rides.csv           # Saved trip records
+│
+├── build.bat               # 1-Click compiler script for Windows
+├── README.md               # Main project presentation & interview Q&A
+└── PROJECT_HANDOVER.md     # This document!
+```
+
+---
+
+## 4. How to Run the Project
+
+Open your terminal in the project folder and type:
+
+```powershell
+.\build.bat
+```
+
+*(Or if already compiled, simply run `.\ridex.exe`)*
+
+---
+
+## 5. How It Works: 5 Test Scenarios to Try
+
+Here are 5 real test cases you can try right now to understand every part of the system:
+
+---
+
+### Case 1: The Standard Happy Path (Complete Ride)
+
+**Goal:** Book a trip from Bangalore to Pune, have a Car driver accept it, complete it, and generate a bill.
+
+1. **Start the app:** Run `.\ridex.exe`.
+2. **Book as Rider:**
+   - Choose `1` (Rider Portal) → Choose `2` (Select Active Rider).
+   - Enter Rider ID: `101` (or `103`).
+   - Choose `2` (Book a Ride):
+     - Pickup: `Banglore`
+     - Drop: `Pune`
+     - Distance: `123` km
+     - Vehicle Type: `1` (Car)
+   - You will see: `[SUCCESS] Ride booked successfully! Your Ride ID is: #1002`.
+   - Choose `6` (Logout) → Choose `3` (Main Menu).
+3. **Accept & Complete as Driver:**
+   - Choose `2` (Driver Portal) → Choose `2` (Select Active Driver).
+   - Enter Driver ID: `201` *(Vikram Singh - Car driver)*.
+   - Choose `4` (View Pending Requests) → You will see Ride `#1002`.
+   - Choose `5` (Accept Ride) → Enter Ride ID `1002`.
+   - Choose `6` (Start Ride) → Status becomes `IN_PROGRESS`.
+   - Choose `7` (Complete Ride & Collect Payment) → Select `2` (UPI).
+4. **Result:** An invoice prints showing:
+   - Base fare: ₹50.00
+   - Distance: 123 km × ₹15 = ₹1,845.00
+   - **Total Bill: ₹1,895.00 [PAID]**
+
+---
+
+### Case 2: Trip Cancellation (Before Driver Starts)
+
+**Goal:** Rider books a ride and decides to cancel it.
+
+1. Go to **Rider Portal (`1`)** → Select Rider `101`.
+2. Book a ride (`2`): Pickup: `A`, Drop: `B`, Distance: `5` km, Vehicle: `Bike`.
+3. Ride is now in `REQUESTED` status.
+4. Choose **`4` (Cancel Current Ride)**.
+5. **Result:** `[SUCCESS] Ride #1003 has been cancelled.`
+   - Status transitions to `CANCELLED`.
+   - The rider is free to book another ride.
+
+---
+
+### Case 3: Business Rules & Edge Cases (Trying to Cheat)
+
+The system contains strict business rules to prevent illegal operations. Try these to see how the system protects itself:
+
+#### A. Trying to cancel an ongoing trip:
+- Once a driver starts a ride (`IN_PROGRESS`), if the rider tries to cancel, the system throws:
+  `[ERROR] [Invalid Operation] Cannot cancel a ride that is already in progress or completed.`
+
+#### B. Booking two rides at the same time:
+- If a rider already has an ongoing ride and tries to book another:
+  `[ERROR] [Invalid Operation] Rider already has an active ride.`
+
+#### C. Entering bad or negative distance:
+- If you enter distance `-10`:
+  `[ERROR] [Invalid Operation] Distance must be greater than zero.`
+
+#### D. Crash-proof typing:
+- If the menu asks for a number (`1-7`) and you accidentally type letters like `abc` or hit Enter repeatedly, **the program will NOT crash**. It clears the input buffer and asks again politely.
+
+---
+
+### Case 4: Vehicle Type Matching Rule
+
+**Goal:** Understand why a Bike driver cannot accept a Car ride.
+
+1. A rider books a **Car** ride.
+2. If you login as Driver `202` (Ravi Kumar - **Bike**):
+   - Choose `4` (View Pending Requests) → It will say: `No pending requests for Bike right now.`
+   - If Driver `202` tries to force-accept the Car ride:
+     `[ERROR] [Invalid Operation] Driver vehicle (Bike) does not match requested (Car).`
+3. Only a driver with a **matching vehicle type** can accept the trip!
+
+---
+
+### Case 5: Session Persistence (Closing & Reopening)
+
+**Goal:** Show that data is never lost when you exit.
+
+1. Complete a ride or register a new rider.
+2. Return to Main Menu and choose **`7` (Exit RideX)**.
+   - Notice the message: `[Session auto-saved to CSV]`.
+3. Open the folder `data/` and open `rides.csv` or `riders.csv` in Notepad or VS Code.
+   - You will see your new rider and completed ride stored there in plain text!
+4. Relaunch `.\ridex.exe` and press **`3` (System Overview)**.
+   - All your riders, drivers, and trip counts are automatically restored without doing anything!
+
+---
+
+## 6. Key OOP Concepts in the Code
+
+When you study or explain this code to your teacher:
+
+1. **Polymorphism:** Look at `Vehicle::calculateFare` in `src/Vehicle.cpp`. When `driver->getVehicle()->calculateFare(distance)` is called, the C++ **vtable** dynamically calls the right calculation for `Car`, `Bike`, or `Auto`.
+2. **Encapsulation:** In `include/Ride.h`, `status` and `fare` are private. External code cannot randomly change a ride from `REQUESTED` to `COMPLETED` without going through `startRide()` and `completeRide()`.
+3. **RAII & Smart Pointers:** In `include/Driver.h`, the driver holds `std::unique_ptr<Vehicle> vehicle`. This means the driver exclusively owns the vehicle, and C++ cleans up memory automatically with zero memory leaks.
+4. **STL Containers:** `RideManager.h` uses `std::unordered_map` for fast $O(1)$ lookups of users by ID.
+
+---
+
+## 7. Need Help or Want to Add Features?
+
+Good next features you can add to practice your C++ skills:
+- **Rating System:** Let riders rate drivers (1 to 5 stars) after a completed trip.
+- **Promo Codes:** Add discount coupon codes (e.g. `RIDE10` for 10% off).
+- **Multiple Vehicles:** Allow a driver to own more than one vehicle and switch between them.
+
+Good luck with RideX! You have a solid, professional C++ codebase to learn from and build upon.
