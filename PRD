@@ -1,0 +1,122 @@
+# Product Requirements Document (PRD) — RideX
+
+**Project Name:** RideX – Ride Sharing System  
+**Document Version:** 1.0  
+**Target Audience:** B.Tech Student (Developer) & AI Coding Agent  
+**Environment:** C++17 / C++20 CLI Application  
+
+---
+
+## 1. Project Overview
+
+### 1.1 What is RideX?
+RideX is a lightweight, command-line ride-hailing simulation written in C++. It simulates the foundational interactions between riders requesting transport and drivers fulfilling trips.
+
+### 1.2 What Problem Does It Simulate?
+In real-world ride-hailing platforms (like Uber or Ola), a central service matches passengers with nearby drivers, tracks ride state transitions, applies vehicle-specific pricing, and records completed transactions. RideX simulates these core operational dynamics in a simplified, deterministic terminal environment without external networking or third-party infrastructure.
+
+### 1.3 Who Uses It?
+- **Riders:** Individuals who search for available rides, book trips, and review their ride history.
+- **Drivers:** Vehicle owners who register their transport, toggle their operational availability, accept incoming requests, and manage ride progress.
+- **System Admin / Internal Dispatcher:** Operates via automated dispatch logic embedded within the application to coordinate ride status, calculate fares, and maintain records.
+
+---
+
+## 2. Main Users & Personas
+
+| User Role | Description | Primary Objective |
+| :--- | :--- | :--- |
+| **Rider** | A customer requiring point-to-point transit. | Find an available driver, book a ride, monitor ride status, cancel if needed, and view historical receipts. |
+| **Driver** | A service partner operating a specific vehicle. | Register a vehicle (Car, Bike, Auto), toggle availability, accept ride dispatches, execute rides from start to finish, and track earnings/history. |
+
+---
+
+## 3. Core Features
+
+### 3.1 Rider Features
+1. **Registration:** Create a rider profile with basic attributes (ID, Name, Phone).
+2. **View Available Drivers:** Query and display currently active and unassigned drivers along with their vehicle details.
+3. **Book a Ride:** Request a ride by specifying pickup location, drop-off location, distance (in km), and preferred vehicle type.
+4. **View Current Ride:** Check the real-time status of an ongoing or pending ride (Pending, Accepted, In Progress).
+5. **Cancel Ride:** Cancel a ride that is in `PENDING` or `ACCEPTED` state (cannot cancel an ongoing or completed ride).
+6. **Ride History:** Display a chronological log of all past rides taken by the rider, including fare and driver details.
+
+### 3.2 Driver Features
+1. **Registration:** Create a driver profile (ID, Name, Phone).
+2. **Add Vehicle:** Associate a single vehicle (Car, Bike, or Auto) with vehicle number and seating capacity.
+3. **Toggle Availability:** Switch operational status between `AVAILABLE` and `UNAVAILABLE`.
+4. **Accept Ride:** Review pending ride requests assigned or broadcasted to the driver and accept one.
+5. **Start Ride:** Transition an accepted ride to `IN_PROGRESS`.
+6. **Complete Ride:** Mark an ongoing ride as `COMPLETED`, calculate final fare, and collect simulated payment.
+7. **View Ride History:** Inspect completed rides and aggregate earnings.
+
+### 3.3 System Features
+1. **Fare Calculation:** Compute distance-based fares dynamically according to the vehicle class:
+   - Base fare + (Rate per km × Distance).
+2. **Ride Lifecycle State Machine:** Enforce valid state transitions (`REQUESTED` → `ACCEPTED` → `IN_PROGRESS` → `COMPLETED` or `CANCELLED`).
+3. **Local In-Memory / File Persistence:** Store entities during the session using C++ STL containers, with structured CSV/text export/import for session persistence.
+
+---
+
+## 4. Ride Lifecycle Flow
+
+```
++------------------+
+|   Rider Books    | ---> State: REQUESTED
++------------------+
+         |
+         v
++------------------+
+|  Driver Accepts  | ---> State: ACCEPTED (Driver marked BUSY)
++------------------+
+         |
+         v
++------------------+
+|   Driver Starts  | ---> State: IN_PROGRESS
++------------------+
+         |
+         v
++------------------+
+| Driver Completes | ---> State: COMPLETED
++------------------+
+         |
+         v
++--------------------+
+| Fare Calculated &  | ---> Payment Generated &
+|  Driver Released   |      Driver marked AVAILABLE
++--------------------+
+```
+
+*Alternative path:* At `REQUESTED` or `ACCEPTED` stages, the rider or driver can trigger `CANCELLED`, which releases both parties back to an idle state.
+
+---
+
+## 5. Business Rules & Constraints
+
+1. **Driver Availability:** A driver can accept a ride only when their status is explicitly `AVAILABLE` and they have zero active rides.
+2. **Single Active Ride Rule:**
+   - A rider can have at most **one** active ride (`REQUESTED`, `ACCEPTED`, or `IN_PROGRESS`) at any time.
+   - A driver can have at most **one** active ride at any time.
+3. **Cancellation Boundaries:**
+   - Rides can only be cancelled while in `REQUESTED` or `ACCEPTED` status.
+   - Once a ride transitions to `IN_PROGRESS`, cancellation is disallowed.
+   - `COMPLETED` rides are immutable.
+4. **Vehicle-Specific Pricing Models:**
+   - **Bike:** Economical base fare, lowest per-km rate.
+   - **Auto:** Standard base fare, moderate per-km rate.
+   - **Car:** Higher base fare, premium per-km rate.
+5. **Payment Completion:** A ride cannot reach final archive status without a successfully settled `Payment` record generated upon completion.
+
+---
+
+## 6. Scope & Non-Requirements
+
+To ensure this project remains strictly focused on core C++ Object-Oriented Programming principles and achievable within 1–2 weeks, the following items are **explicitly out of scope**:
+
+- ❌ **No GPS or Real-Time Coordinates:** Distance is entered directly in kilometers as a numerical value.
+- ❌ **No Online Payment Gateways:** Payments are simulated locally (Cash / Wallet status flagged as `PAID`).
+- ❌ **No Relational or External Databases:** Data lives in memory, with optional flat-file (CSV) backup.
+- ❌ **No User Authentication / Passwords:** Users are identified by their unique ID for CLI convenience.
+- ❌ **No GUI or Mobile App:** Pure ANSI terminal / standard CLI output.
+- ❌ **No Multithreading / Network Sockets:** Single-threaded synchronous execution loop.
+- ❌ **No Machine Learning / AI Dispatch:** Deterministic first-available or direct driver selection.
